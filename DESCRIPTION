@@ -1,12 +1,19 @@
 Package: CCN
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Generate the Standardized Common Cell type Nomenclature (CCN) 
 Version: 0.1.0
-Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
-License: What license is it under?
+Author: Jeremy Miller <jeremym@alleninstitute.org>
+Maintainer: Jeremy Miller <jeremym@alleninstitute.org>
+Description: To facilitate cross-dataset comparison, the Allen Institute created the CCN for matching and tracking cell types across studies.  A primary objective of the CCN was to develop a system that would be straightforward and allow designation of cell types with or without hierarchical organization. This library applies the CCN to any data set.  More details can be found here: https://portal.brain-map.org/explore/classes/nomenclature
+License: Allen Institute Software License
 Encoding: UTF-8
 LazyData: true
+Imports:
+    dendextend (>= 1.7.0),
+    ggplot2 (>= 2.2.1),
+    dplyr (>= 0.3.4),
+    data.table (>= 1.0),
+    jsonlite (>= 1.1),
+    rols (>= 2.0)
 RoxygenNote: 7.1.2
+VignetteBuilder: knitr
