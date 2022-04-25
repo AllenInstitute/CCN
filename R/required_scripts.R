@@ -1,6 +1,273 @@
 ######################################################################################
 ## MAIN NOMENCLATURE FUNCTIONS
 
+#' Apply CCN (**BETA**)
+#'
+#' This **BETA** function is a wrapper for most of the other functions in the CCN library. It takes
+#'   as input whatever information is available (e.g., dend, nomenclature, cell_assignment, metadata)
+#'   and uses this to try and output a standard nomenclature table and other CCN outputs.  Please see
+#'   the "Applying CCN to an existing taxonomy: one function" vignette for examples of how to use
+#'   this function to apply the CCN in various contexts.
+#'
+#' @param dend dendrogram of cell types to annotate.  At least one of dend, nomenclature, cell_assignment, or metadata must be provided.
+#' @param nomenclature the nomenclature table output from `build_nomenclature_table` or related/downstream functions.
+#' @param cell_assignment a named vector linking each unique cell id ('names(cell_assignment)') to their cell type assignments ('cell_assignment')
+#' @param metadata cell or cell type metadata table that includes the columns to annotate
+#' @param first_label a named vector used as prefix for cell_set_label
+#' @param taxonomy_id unique accession ID for the taxonomy also used to prefix the cell sets accessions.  Defaults to `CCN[YYYYMMDD]0`
+#' @param taxonomy_author the name of a point person for this taxonomy
+#' @param taxonomy_citation permanent data identifier corresponding to the taxonomy (or default="" if none). Ideally the DOI for a relevant publication.
+#' @param structure the location in the brain (or body) from where the data in the taxonomy was collected
+#' @param ontology_tag a standard ontology term (e.g., from UBERON) for the `structure`, or "none" if unavailable.  NULL (default) attempts to find one in UBERON using `find_ontology_terms`.
+#' @param metadata_columns a character vector of column names corresponding to the metadata fields to add annotations. Only used if "metadata" is provided
+#' @param metadata_order optional character vector of column names indicating the order to include metadata.  If supplied, must be the same length as "metadata_columns". Only used if "metadata" is provided
+#' @param annotation_columns character vector indicating which column to annotate for each metadata column supplied (default is is "cell_set_preferred_alias"). Only used if "metadata" is provided
+#' @param cluster_column column name in "metadata" that corresponds to values in the "cell_set_preferred_alias" column of "cell_set_information". Only used if "metadata" is provided
+#' @param append_metadata If TRUE, it will append info; if FALSE (default), it will skip cases where there is already an entry. Only used if "metadata" is provided
+#' @param ccn_filename file name for zip file with final CCN files containing the same information that is returned.  Will output to current working directory unless full path is specified.  Will not output anywhere if set to NULL.
+#'
+#' @return a list containing the three CCN standard outputs:
+#' \describe{  # Describe is optional and can go after and param or return
+#'   \item{cell_set_information}{Final nomenclature table where rows correspond to cell sets and columns correspond to standard CCN columns.}
+#'   \item{final_dendrogram}{A dendrogram updated with node labels and CCN annotations, if dend was provided.  This is what is output in dend.json}
+#'   \item{mapping}{A data frame where the first columns corresponds to each cell's unique ID (if cell_assignment or metadata is provided) and the remaining columns correspond to cell sets. Entries are either 0 = cell unassigned to cell set or 1 = cell assigned to cell set.}
+#' }
+#'
+#' @export
+apply_CCN <- function(dend = NULL,
+                      nomenclature = NULL,
+                      cell_assignment = NULL,
+                      metadata = NULL,
+                      first_label  = setNames("All",1),
+                      taxonomy_id  = paste0("CCN",format(Sys.time(), "%Y%m%d"),0),
+                      taxonomy_author = "Unspecified",
+                      taxonomy_citation = "",
+                      structure    = "neocortex",
+                      ontology_tag = NULL,
+                      metadata_columns = c("subclass_label"),
+                      metadata_order = NULL,
+                      annotation_columns = rep("cell_set_preferred_alias",length(metadata_columns)),
+                      cluster_column = "cluster_label",
+                      append_metadata = FALSE,
+                      ccn_filename = "nomenclature.zip"){
+
+  ##############################################################
+  # Load libraries
+  library(dplyr)
+  library(dendextend)
+  library(data.table)
+  library(jsonlite)
+
+
+  ##############################################################
+  # Variable prep and error check
+  if(is.null(ontology_tag)) {
+    ontology_tag <- find_ontology_terms(structure)[1,2]
+    if(ontology_tag=="") ontology_tag = "none"
+  }
+  if((is.null(dend))&(is.null(nomenclature))&(is.null(cell_assignment))&(is.null(metadata))){
+    stop("Error: at least one of dend, nomenclature, cell_assignment, or metadata must be provided.")
+  }
+
+
+  ##############################################################
+  # Define starting nomenclature table
+  if (!is.null(nomenclature)){
+
+    # If nomenclature table is provided, do not generate it
+    if (!is.null(dend)){
+      warning("Since both `nomenclature` and `dend` are provided final dendrogram will be annotated exclusively from provided nomenclature and it's updates, and not from any extra information in `dend`.  We recommend providing both ONLY when the inputted nomenclature table was originally generated from the inputted dendrogram.")
+    }
+    # Confirm "All cells" exists and if not, then generate it
+    nomenclature <- as.data.frame(nomenclature)
+    if(sum(nomenclature$cell_set_preferred_alias=="All cells")==0){
+      cell_set_accession <- max(as.numeric(as.character(unclass(
+        sapply(nomenclature$cell_set_accession, function(x) strsplit(x,"_")[[1]][2])))))
+      cell_set_accession <- gsub("CCN","CS",paste0(taxonomy_id,"_",1:(cell_set_accession+1)))
+      cell_set_label <- sort(unique(as.numeric(gsub(".*?([0-9]+).*", "\\1", nomenclature$cell_set_label))))
+      cell_set_label <- substr(10^max(nchar(cell_set_label))+cell_set_label,2,100)
+      cell_set_label <- merge_cell_set_labels(paste(first_label[1],cell_set_label))
+      nomenclature = rbind(nomenclature, data.frame(
+        cell_set_accession = cell_set_accession,
+        original_label = "",
+        cell_set_label = cell_set_label,
+        cell_set_preferred_alias = "All cells",
+        cell_set_aligned_alias = "",
+        cell_set_additional_aliases = "",
+        cell_set_structure = stucture,
+        cell_set_ontology_tag = ontology_tag,
+        cell_set_alias_assignee = taxonomy_author,
+        cell_set_alias_citation = taxonomy_citation,
+        taxonomy_id = taxonomy_id
+      ))
+
+    }
+  } else if(!is.null(dend)){
+
+    # Build a starting nomenclature table from the dendrogram, if it is provided.
+    dend <- try(as.dendrogram(dend),silent=TRUE)
+    if(class(dend)=="try-error") stop("Error: dend is not in a format that can be converted to a dendrogram.")
+    nomenclature_information <- build_nomenclature_table(dend,  first_label, taxonomy_id, taxonomy_author,
+                                                         taxonomy_citation, structure, ontology_tag)
+    nomenclature = nomenclature_information$cell_set_information
+  } else if ((!is.null(cell_assignment))|(!is.null(metadata))){
+
+    # Define cell_assignment from metadata if not provided and if possible, otherwise throw and error
+    if(is.null(cell_assignment)){
+      if(class(try(metadata[,cluster_column],silent = TRUE))=="try-error"){
+        stop("Error: Valid cluster_column in metadata must be provided if dend, nomenclature, and cell_assignment are unspecified.")
+      } else{
+        cell_assignment <- setNames(metadata[,cluster_column],rownames(metadata))
+        warning("cell_assignment is derived from metadata and therefore outputted `mapping` matrix may be innaccurate.")
+      }
+    }
+
+    # Get the cell types from inputted or derived cell_assignment
+    if(is.factor(cell_assignment)) {
+      types <- levels(cell_assignment)
+    } else {
+      types <- as.character(unique(cell_assignment))
+    }
+    # Set the nomenclature table
+    cell_set_accession <- gsub("CCN","CS",paste0(taxonomy_id,"_",1:(length(types)+1)))
+    cs_digits   <- nchar(length(types))+1
+    first_label <- setNames(first_label[1],"1")
+    warning("Only first `first_label` entry is used when dend and nomenclatre are set to NULL.")
+    num <- substr(10^cs_digits+(1:length(types)),2,100)
+    cell_set_label <- paste(first_label[1],num)
+
+    nomenclature = data.frame(
+      cell_set_accession = cell_set_accession,
+      original_label = "",
+      cell_set_label = c(cell_set_label,"All cells"),
+      cell_set_preferred_alias = c(types,"temp All cells"),
+      cell_set_aligned_alias = "",
+      cell_set_additional_aliases = "",
+      cell_set_structure = stucture,
+      cell_set_ontology_tag = ontology_tag,
+      cell_set_alias_assignee = taxonomy_author,
+      cell_set_alias_citation = taxonomy_citation,
+      taxonomy_id = taxonomy_id
+    )
+
+    # Move cell_set_label="All cells" to cell_set_preferred_alias
+    nomenclature$cell_set_preferred_alias[nomenclature$cell_set_label=="All cells"] = "All cells"
+    labNew <- merge_cell_set_labels(nomenclature$cell_set_label)
+    nomenclature$cell_set_label[nomenclature$cell_set_preferred_alias=="All cells"] = labNew
+  }
+
+
+  ##############################################################
+  ## If metadata and associated columns are provided, add additional cell_sets based on metadata
+  nomenclature <- annotate_nomenclature_from_metadata(
+    nomenclature, metadata, metadata_columns, metadata_order, annotation_columns, cluster_column, append_metadata)
+  # NOTE: any error checks should be completed within the above function
+
+
+  ##############################################################
+  ## Define cell set children
+  nomenclature <- define_child_accessions(nomenclature)
+
+
+  ##############################################################
+  ## Update and save the dendrogram, if a dendrogram was provided
+  if(!is.null(dend)){
+    # Update the dendogram
+    updated_dendrogram <- update_dendrogram_with_nomenclature(nomenclature_information$initial_dendrogram,nomenclature)
+
+    # Convert to list
+    dend_list <- dend_to_list(updated_dendrogram, omit_names = c("markers","markers.byCl","class"))
+
+    # Save as a json file
+    dend_JSON <- toJSON(dend_list, complex = "list", pretty = TRUE)
+    out <- file("dend.json", open = "w")
+    writeLines(dend_JSON, out)
+    close(out)
+  }
+
+
+  ##############################################################
+  ## Define cell to cell set mappings, if cell_assignment is available
+
+  # If cell_assignment not provided, try to guess cell_assignment from metadata table
+  if(is.null(cell_assignment)&(!is.null(metadata))){
+    if(class(try(metadata[,cluster_column],silent = TRUE))!="try-error"){
+      cell_assignment  <- metadata[,cluster_column]
+      name_col <- grepl("name",colnames(metadata))+grepl("sample",colnames(metadata))+grepl("cell",colnames(metadata))
+      if(sum(name_col)==0){
+        names(cell_assignment) <- 1:length(cell_assignment)
+        warning("cell_assignment was not provided with names. Names are set as an ordered vector 1:length(cell_assignment).")
+      } else {
+        names(cell_assignment) <- metadata[,which.max(name_col)[1]]
+        cn <- colnames(metadata)[which.max(name_col)[1]]
+        warning(paste0("cell_assignment was not provided with names. Names are set as metadata$",cn,"."))
+      }
+    }
+  }
+  cell_id <- cell_assignment
+
+  if(!is.null(cell_assignment)){
+    # Add cell names if needed
+    if(is.null(names(cell_assignment))){
+      names(cell_assignment) <- 1:length(cell_assignment)
+      warning("cell_assignment was not provided with names. Names are set as an ordered vector 1:length(cell_assignment).")
+    }
+
+    # Define the cell_id (e.g., cell set accession id) from the cell_assignment
+    cell_id <- nomenclature[match(cell_assignment,nomenclature$cell_set_preferred_alias),"cell_set_accession"]
+    names(cell_id) <- names(cell_assignment)
+
+    # Assign dendrogram cell sets (if dendrogram provided)
+    if(!is.null(dend)){
+      mapping <- cell_assignment_from_dendrogram(updated_dendrogram,names(cell_id),cell_id)
+    } else{
+      # If no dendrogram, initialize mapping matrix
+      mapping <- data.frame(sample_name=samples, call=((cell_id==cell_id[1])+1-1))
+      colnames(mapping) <- c("sample_name",cell_id[1])
+      if(length(first_label)>1){
+        warning("Currently nomenclature tables without dendrograms, but with more than one cell_set_label prefix sometimes cause issues in generating the cell by cell set assignment matrix.")
+      }
+    }
+
+    # Assign remaining mappings based on cell sets
+    mapping <- cell_assignment_from_groups_of_cell_types(nomenclature,cell_id,mapping,FALSE)
+
+    # Output any missed cell set accession IDs
+    missed_ids <- setdiff(updated_nomenclature$cell_set_accession,colnames(mapping))
+    if (length(missed_ids)>0){
+      warning(paste("The following cell sets were not used for cell mapping:",paste0(missed_ids,collapse="; ")))
+    }
+
+    # Output cell to cell set assignments
+    fwrite(mapping,"cell_to_cell_set_assignments.csv")
+
+  }
+
+
+  ##############################################################
+  ## Create standard CCN file and return results
+
+  # Zip existing files, if requested
+  if(!is.null(nomenclature))
+    fwrite(nomenclature,"nomenclature_table.csv")
+  files = c("dend.json","nomenclature_table.csv","cell_to_cell_set_assignments.csv")
+  files = intersect(files,dir())
+  if(!is.null(ccn_filename))
+    zip(ccn_filename, files=files)
+  file.remove(files)
+
+  # Return results
+  if(!exists("nomenclature"))       nomenclature = NULL
+  if(!exists("updated_dendrogram")) updated_dendrogram = NULL
+  if(!exists("mapping"))            mapping = NULL
+  list(cell_set_information=nomenclature, final_dendrogram=updated_dendrogram, mapping=mapping)
+
+}
+
+
+
+
+
 #' Build initial nomenclature table from dendrogram
 #'
 #' Take a standard R dendrogram variable and some taxonomy metadata and generate an
@@ -23,14 +290,17 @@
 #' }
 #'
 #' @export
-build_nomenclature_table <- function(
-   dend,
-   first_label  = setNames("All",1),
-   taxonomy_id  = paste0("CCN",format(Sys.time(), "%Y%m%d"),0),
-   taxonomy_author = "Unspecified",
-   taxonomy_citation = "",
-   structure    = "neocortex",
-   ontology_tag = "UBERON:0001950"){
+build_nomenclature_table <- function(dend,
+                                     first_label  = setNames("All",1),
+                                     taxonomy_id  = paste0("CCN",format(Sys.time(), "%Y%m%d"),0),
+                                     taxonomy_author = "Unspecified",
+                                     taxonomy_citation = "",
+                                     structure    = "neocortex",
+                                     ontology_tag = "UBERON:0001950"){
+
+  # Load required libraries
+  library(dplyr)
+  library(dendextend)
 
   ################################################################
   ## Update the dendrogram labels
@@ -279,11 +549,12 @@ define_child_accessions <- function(nomenclature){
 #' @param updated_nomenclature dendrogram of annotated cell types
 #' @param cell_id a character vector of cell_set_accession_ids that corresponds to each sample
 #' @param mapping A data frame where the first columns corresponds to the cell sample_name and the remaining columns correspond to cell sets (e.g., the output from `cell_assignment_from_dendrogram`)
+#' @param verbose A logical indicating whether to output cell set accession IDs of new annotations to screen (default=TRUE)
 #'
 #' @return An updated "mapping" variable with additional cells sets added from nomenclature table. Entries are either 0 = cell unassigned to cell set or 1 = cell assigned to cell set.
 #'
 #' @export
-cell_assignment_from_groups_of_cell_types <- function(updated_nomenclature,cell_id,mapping){
+cell_assignment_from_groups_of_cell_types <- function(updated_nomenclature,cell_id,mapping,verbose=TRUE){
 
   ## Determine the relevant cell sets to annotate
   used_ids      <- intersect(updated_nomenclature$cell_set_accession,colnames(mapping))
@@ -308,14 +579,14 @@ cell_assignment_from_groups_of_cell_types <- function(updated_nomenclature,cell_
   }
 
   ## Now annotate them!
-  print("Cell sets added to table:")
+  if(verbose) print("Cell sets added to table:")
   for (cl in cell_type_labels){
     ids <- updated_nomenclature$cell_set_accession[match(labsL[[cl]],updated_nomenclature$cell_set_label)]
     kp  <- is.element(cell_id,ids)
     if(sum(kp)>0){
       cell_set_id <- updated_nomenclature$cell_set_accession[match(cl,updated_nomenclature$cell_set_label)]
       mapping[,cell_set_id] <- ifelse(kp,1,0)
-      print(cell_set_id)
+      if(verbose) print(cell_set_id)
     }
   }
 
@@ -425,10 +696,16 @@ annotate_nomenclature_from_metadata <- function(cell_set_information, metadata, 
 #' @export
 merge_cell_set_labels <- function(cell_set_label_vector, sep=" "){
   if(length(cell_set_label_vector)==1) return(cell_set_label_vector)
+  if(length(strsplit(labs[1],sep)[[1]])==1){
+    cell_set_label_vector <- paste("All",cell_set_label_vector,sep=sep)
+    warning("No first_label provided with cell_set_labels, therefore `All` is set as first_label. This may cause problems later.")
+  }
   labs <- as.character(cell_set_label_vector)
   name <- as.character(unclass(sapply(labs, function(x) strsplit(x,sep)[[1]][1])))
   nums <- as.character(unclass(sapply(labs, function(x) strsplit(x,sep)[[1]][2])))
-  ints <- setNames(as.numeric(nums),nums)
+  ints <- suppressWarnings(setNames(as.numeric(nums),nums))
+  if(sum(is.na(ints))>0)
+    stop("cell_set_label_vector is of a format incompatible by this function. They all must be [first_label][sep][INTEGER_VECTOR].")
 
   val <- NULL
   for (clas in unique(name)){

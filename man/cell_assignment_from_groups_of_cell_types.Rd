@@ -7,7 +7,8 @@
 cell_assignment_from_groups_of_cell_types(
   updated_nomenclature,
   cell_id,
-  mapping
+  mapping,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -16,6 +17,8 @@ cell_assignment_from_groups_of_cell_types(
 \item{cell_id}{a character vector of cell_set_accession_ids that corresponds to each sample}
 
 \item{mapping}{A data frame where the first columns corresponds to the cell sample_name and the remaining columns correspond to cell sets (e.g., the output from `cell_assignment_from_dendrogram`)}
+
+\item{verbose}{A logical indicating whether to output cell set accession IDs of new annotations to screen (default=TRUE)}
 }
 \value{
 An updated "mapping" variable with additional cells sets added from nomenclature table. Entries are either 0 = cell unassigned to cell set or 1 = cell assigned to cell set.

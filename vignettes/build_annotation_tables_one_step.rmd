@@ -1,0 +1,348 @@
+---
+title: "Applying CCN to an existing taxonomy: one step (beta!)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Applying CCN to an existing taxonomy: one step (beta!)}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc} 
+---
+  
+# Overview
+  
+This script applies the Common Cell type Nomenclature (CCN) to an existing hierarchically-structured taxonomy of cell types, in this case Human Middle Temporal Gyrus (MTG): May 2022.  More information about the CCN is available at the [Allen Brain Map](https://portal.brain-map.org/explore/classes/nomenclature) and in the [associated eLife publication](https://elifesciences.org/articles/59928).  This script requires a taxonomy and some cell meta-data as input and outputs several files useful for publication and for ingest into in-process taxonomy services.  Please post any thoughts about the CCN to the [Community Forum](https://community.brain-map.org/c/cell-taxonomies/)!  This scripts relates to the May 2022 version of the human Middle Temporal Gyrus (MTG) that is used for multiple projects and is available in the Transcriptomics Explorer.
+  
+There are two files required as input to this script:  
+
+1. `dend.RDS`: this is an R `dendrogram` object representing the taxonomy to be annotated.  If you used R for cell typing in your manuscript, this is likely a variable that was created at some point during this process and from which your dendrogram images are made.  While this assumes a hierarchical structure of the data, additional cell sets of any kind can be made later in the script.  Code for converting from other formats to the R `dendrogram` format is not provided, but please post to the [Community Forum](https://community.brain-map.org/c/cell-taxonomies/) if you have questions about this.  
+2. `metadata.csv`: a table which includes a unique identifier for each cell (in this example it is stored in the `sample_name` column) as well as the corresponding cell type from the dendrogram for each cell (in this example it is stored in the `cluster_label` column).  Additional metadata of any kind can be optionally included in this table.  
+  
+Example files from an upcoming SEA-AD taxonomy at the Allen Institute (~June 2022) are included with this library.  
+  
+This utilizes a function called `apply_CCN` which wraps most of the steps of applying the CCN into a single R function. This function is **BETA** but *should* be robust to different input formats, as it get generate the relevant CCN outputs from a dendrogram, from an existing nomenclature table, from a metadata table, or from a named vector of cell type assignments.  Other inputs include inputs for most of the other CCN functions.  Please [post an issue](https://portal.brain-map.org/explore/classes/CCN) if something doesn't work properly.  
+  
+  
+# Build the nomenclature
+
+The remainder of this script describes how to run the CCN in R.  At this point open RStudio (or R) and start running the code below.  The first few blocks correspond to housekeeping things needed to get the workspace set up.
+  
+  
+### Workspace setup
+  
+```{r setup}
+# NOTE: REPLACE THIS LINK BELOW WITH YOUR WORKING DIRECTORY
+outputFolder = paste0(getwd(),"/")
+
+setwd(outputFolder)                           # Needed only if copying and pasting in R
+knitr::opts_chunk$set(echo = TRUE)            # Needed only for RStudio
+knitr::opts_knit$set(root.dir = outputFolder) # Needed only for RStudio
+```
+  
+  
+### Load required libraries  
+  
+```{r}
+suppressPackageStartupMessages({
+  library(CCN) # In this case, other libraries are nested in `apply_CCN`
+})
+```
+  
+  
+### Read in the data
+
+As discussed above, we have provided a dendrogram of human MTG cell types (called "dend"), and associated cell metadata (called "metadata") as an example.  We read those things in here.  
+
+```{r, fig.height=6, fig.width=13}
+# REPLACE THIS LINE OF CODE WITH CODE TO READ IN YOUR DENDROGRAM, IF NEEDED
+data(dend) # Example SEA-AD dendrogram
+dend <- as.dendrogram(dend)
+
+# REPLACE THIS LINE OF CODE WITH CODE TO READ IN YOUR DENDROGRAM, IF NEEDED
+data(metadata) # Example SEA-AD dendrogram
+
+# Plot the unannotated dendrogram as a sanity check
+plot(dend,main="You should see your desired cell type names on the base of this plot")
+```
+	
+	
+### Define input variables  
+  
+Many of the variables have reasonable defaults, and for this tutorial we leave them at their default values.  More details are available in the "Applying CCN to an existing taxonomy: extended" tutorial.  
+
+```{r}
+# Person uploading the data and taxonomy
+taxonomy_author  <- "Jeremy Miller"
+# Note that this example taxonomy was created by Nik Jorstad and refined by Kyle Travaglini.
+
+# DOI of relavent taxonomy citation, if any
+taxonomy_citation <- ""
+
+# Prefix for cell set label.  The automated function works best if you only have one.
+first_label      <- setNames("SEAAD_MTG", 1)
+
+# Brain structure.  Ontology tag is auto-generated.
+structure        <- "middle temporal gyrus"
+
+# Some metadata variables
+metadata_columns <- c("subclass_label", "class_label")
+metadata_order   <- c("subclass_order", "class_order")  
+cluster_column   <- "cluster_label" 
+
+# Named vector of cell to cell type assignments (can be auto-generated, but better to include)
+cell_assignment  <- setNames(metadata$cluster_label,metadata$sample_name)
+``` 	
+	
+	
+### Run the main function
+  
+This line of code will run all the scripts, output the relevant zip file to `nomenclature.zip` in your working directory, and return the same variables for further manipulation in R.  
+  
+```{r}
+ccn_output <- apply_CCN(dend = dend,
+                        cell_assignment = cell_assignment,
+                        metadata = metadata,
+                        first_label  = first_label,
+                        taxonomy_author = taxonomy_author,
+                        taxonomy_citation = taxonomy_citation,
+                        structure    = structure,
+                        metadata_columns = metadata_columns,
+                        metadata_order = metadata_order,
+                        cluster_column = cluster_column)
+```
+  
+```{r}
+
+
+cell_set_information <- nomenclature_information$cell_set_information
+
+cell_set_information <- annotate_nomenclature_from_metadata(cell_set_information, metadata, metadata_columns, 
+                                                            metadata_order, annotation_columns, cluster_column, append)
+
+# Since we used aligned alias terms for subclass and class, we will also save these terms in the cell_set_aligned_alias_slot
+annotation_columns   <- c("cell_set_aligned_alias","cell_set_aligned_alias") 
+append               <- TRUE # If TRUE, it will append info; if FALSE, it will ignore cases where there is already an entry
+cell_set_information <- annotate_nomenclature_from_metadata(cell_set_information, metadata, metadata_columns, 
+                                                            metadata_order, annotation_columns, cluster_column, append)
+```
+
+  
+### Save the initial dendrogram and nomenclature table
+
+Here we save the cell_set_information to a csv file (`nomenclature_table.csv`) and output the initial_dendrogram to the screen for manual annotation.  You can uncomment the pdf- and dev- lines to save as a pdf (`initial_dendrogram.pdf`) .  
+  
+```{r, fig.height=6, fig.width=13}
+#pdf("initial_dendrogram.pdf",height=8,width=15)
+plot_dend(nomenclature_information$initial_dendrogram, node_size=3)
+#dev.off()
+
+write.csv(cell_set_information,"initial_nomenclature_table.csv",row.names=FALSE)
+```
+  
+  
+### Manual annotation of cell sets (optional) 
+  
+This step is where you can update the `nomenclature_table.csv` file to add or change aliases and structures, or to add additional cell sets entirely.  By default all cell sets corresponding to cell types ("leaf" nodes) are initially assigned exactly one alias that are assigned as the preferred alias, and all remaining cell sets (internal nodes) do not have any aliases.  
+
+The `original_label` column can be used to identify cell sets at the stage for updates by matching with the node (or leaf) label shown in the plotted dendrogram. **Do not update the `cell_set_accession`, `cell_set_label`, or `taxonomy_id` columns of existing cell sets** (although these will need to be provided for added cell sets).  If needed cell_set_structures and associated annotation_tags can be updated at this point, although in most cases these will likely remain unchanged.  
+  
+The `cell_set_alias_assignee` and `cell_set_alias_citation` columns can be updated at this point, as described above.  Our example MTG file on the GitHub repo includes some examples of how this can be done.  
+  
+The `cell_set_aligned_alias` is a special alias slot designed to match cell types **across multiple taxonomies**.  Ideally these terms will be selected from a semi-controlled vocabulary of terms that are agreed-upon in the relevant cell typing community, for example due to their historical significance or includes in a respected ontology, and will also be assigned in the context of a reference taxonomy.  For mammalian neocortex we proposed a specific format for such aligned aliases:  
+
+* Glutamatergic neuron: [Layer] [Projection] #  (e.g., L2/3 IT 4)  
+* GABAergic neuron: [Canonical gene(s)] # (e.g., Pvalb 3)  
+* Non-neuron: [Cell class] # (e.g., Microglia 2)  
+* For any cell type a historical name could be substituted (e.g., Chandelier 1)  
+
+A series of such aligned aliases were used in a recent series of studies in mammalian primary motor cortex (M1), and can be found in one of the supplementary tables of the [flagship paper](https://www.nature.com/articles/s41586-021-03950-0).  We use the same aligned alias terms here, with the exception that we replace "L4/5 IT" with "L4 IT" since MTG includes a traditional layer 4 while M1 does not.  
+  
+Additional cell sets can be added at this time as well.  **This is very important!**  To do this, take the following steps:  
+
+1. In a new row, define the `cell_set_accession` as the largest existing value plus one  
+2. Set the `taxonomy_id` to match the other cell sets.  Likely cell_set_structures and associated annotation_tags will also match the other cell sets  
+3. If the new cell set corresponds to combinations of cell types present in the tree, the cell_set_label must include the numeric components of the cell_set_labels for relevant cell types.  For example, if you wanted to build a new cell set that includes "MTG 001", "MTG 002", and "MTG 005", the cell_set_label would be set as "MTG 001-002, 005".  If the cell set is unrelated to cell types, it should be given a name distinct from what is shown in the tree (in our example, any name EXCEPT "MTG #").  
+4. Any of the alias columns can be set as described above.  
+  
+Other columns can also be added to this table, if desired, and those columns will be appended to the dendrogram object in the code below as well.  
+  
+  
+#### Read in the updated nomenclature
+  
+Once this file has been completed, save the result as a csv file, and continue with the code below, using that file name as input.  
+  
+```{r}
+# Since we didn't change anything we are not reading in the file, but here is how you would do it
+#updated_nomenclature <- read.csv("initial_nomenclature_table.csv")
+updated_nomenclature <- cell_set_information
+```
+  
+  
+#### Manual annotation within R
+  
+In this case we are going to complete the manual annotation steps within R for the purposes of the vignette.  This is another option instead of (or in addition to) writing and reading the files.  
+  
+```{r}
+# Add node labels corresponding to all IT cells, Non-neuronal, and Non-neural cells
+updated_nomenclature[updated_nomenclature$cell_set_accession=="CS202204130_201","cell_set_preferred_alias"] <- "IT"
+updated_nomenclature[updated_nomenclature$cell_set_accession=="CS202204130_238","cell_set_preferred_alias"] <- "Non-neuronal"
+updated_nomenclature[updated_nomenclature$cell_set_accession=="CS202204130_238","cell_set_aligned_alias"]   <- "Non-neuronal"
+updated_nomenclature[updated_nomenclature$cell_set_accession=="CS202204130_248","cell_set_preferred_alias"] <- "Non-neural"
+updated_nomenclature[updated_nomenclature$cell_set_accession=="CS202204130_248","cell_set_aligned_alias"]   <- "Non-neural"
+```
+  
+  
+### Label cell set children
+  
+Create an additional tag called `child_cell_set_accessions`, which is a "|"-separated character vector indicating all of the child set sets in the dendrogram (e.g., "provisional cell types", "leaves", or "terminal nodes").  This is calculated by using the `cell_set_label` tags and will help with integration into downstream ontology use cases.  
+  
+```{r}
+updated_nomenclature <- define_child_accessions(updated_nomenclature)
+```
+  
+  
+### Output the nomenclature table
+  
+It is useful to review the nomenclature table at this point, and therefore it is output here.  
+  
+```{r}
+write.csv(updated_nomenclature,"nomenclature_table.csv",row.names=FALSE)
+```
+
+At this point the nomenclature table is finalized.  The remaining steps involve checking that things look right and outputting files.  
+  
+  
+# Update and save the dendrogram
+  
+### Update the dendrogram and plot the results
+
+This code will take the information from the table above and add it to the initial dendrogram object.  When plotted the only visible difference will be that the new cell set alias names (if any) will show up to replace the n## labels from the initial plot.  However, ALL of the meta-data read in from the table will be added to the relevant nodes or leafs.  Cell sets not linked to the tree will be ignored in this step, but will be added to the relevant text files output below.  
+  
+```{r, fig.height=6, fig.width=13}
+updated_dendrogram <- update_dendrogram_with_nomenclature(nomenclature_information$initial_dendrogram,updated_nomenclature)
+
+# In this case we are displaying the dendrogram to the screen, but uncomment the lines below to save as a file
+#pdf("updated_dendrogram.pdf",height=8,width=15)
+plot_dend(updated_dendrogram, node_size=3)
+#dev.off()
+```
+  
+**Review the dendrogram carefully at this point!**  You should see all of the node labels that you added in the nomenclature table.  If you don't, then you'll need to review the outputted nomenclature_table.csv in the context of the initial dendrogram to make sure everything matches, correct any errors in the nomenclature table, and repeat the steps above starting from "Read in the updated nomenclature".  If things look correct, then it's time to proceed.  
+  
+  
+### Save the dendrogram in various formats
+  
+Plots only show a small fraction of the data available in these dendrogram objects; to see the rest the dendrogram needs to be saved.  We find both the R "dendrogram" format and the "json" format useful for different applications at the Allen Institute and code for saving data as both are presented below.  First, let's save the R object.  
+  
+```{r} 
+# Save as an R data object
+saveRDS(updated_dendrogram, file="dend.RDS")
+# Alternative format
+# save(updated_dendrogram, file="dend.rda")
+```
+  
+  
+Now let's save the json format.  Note that only some dendrogram attributes can be converted to a list.  If this section crashes you may need to update the "omit_names" variable.  Typically vectors of length 1 (e.g., characters, integers, factors) work but more complex attributes are less reliable.  
+  
+```{r}
+# Convert to a list
+dend_list <- dend_to_list(updated_dendrogram, omit_names = c("markers","markers.byCl","class"))
+
+# Save as a json file
+dend_JSON <- toJSON(dend_list, complex = "list", pretty = TRUE)
+out <- file("dend.json", open = "w")
+writeLines(dend_JSON, out)
+close(out)
+```
+  
+  
+# Define cell to cell set mappings
+
+Up to this point the document describes how to apply the CCN to cell sets based on a hierarchical (or non-hierarchical) dendrograms, with an additional manual annotation step.  This final section describes how cells within a data set can be mapped onto this nomenclature.  Doing this would better allow mapping of cells and cell sets between multiple taxonomies, particularly in cases where multiple taxonomies contain the same cells.  
+  
+### Set up metadata variables
+  
+Prior to assigning nomenclature to individual cells, we need to link each cell to the updated nomenclature for each cell set using information from the metadata file read in above (or if needed, a separate file can be read in here).  More specifically, we need to create a character vector of `cell_set_accession_id`s called `cell_id` that corresponds to each cell used for generating the taxonomy.  This variable is used as a starting point to assign all cells to all cell sets.  In this example, the metadata file we read in above includes a `preferred_alias` column (called `cluster_label`) corresponding to the cell type names from this Transcriptomics Explorer.  
+  
+```{r} 
+# Read in metadata and collect correct columns for sample name and cell set accession id
+# Not needed, as it was read above.
+
+# OPTION 1: COLUMN FOR ACCESSION ID ALREADY EXISTS - (not common)
+# cell_id <- metadata$cell_set_accession
+# samples <- metadata$sample_name
+
+# OPTION 2: NEED TO GENERATE COLUMN FROM DENDROGRAM LABELS
+label_col <- "cluster_label"  # Column name with dendrogram labels
+cell_id   <- updated_nomenclature[match(metadata[,label_col],updated_nomenclature$cell_set_preferred_alias),
+                                  "cell_set_accession"]
+cell_id[is.na(cell_id)] = "none"
+samples   <- metadata$sample_name
+```
+  
+  
+### Assign cells to dendrogram cell sets
+  
+Next, we want to automatically link each cell to each cell set that is available in the dendrogram.  This is done as a single line of code (Option 1). *Note: if a dendrogram is not available, the `mapping` table can be initialized using a single cell set (Option 2).*  
+  
+```{r} 
+# OPTION 1: START FROM A DENDROGRAM
+mapping <- cell_assignment_from_dendrogram(updated_dendrogram,samples,cell_id)
+
+# OPTION 2: USE ONLY THE `updated_nomenclature` table
+#mapping <- data.frame(sample_name=samples, call=((cell_id==cell_id[1])+1-1))
+#colnames(mapping) <- c("sample_name",cell_id[1])
+```  
+  
+The result of this script is a data frame where the first columns corresponds to the cell `sample_name`.  This is the term used at the Allen Institute for a unique cell ID.  This ID is unique across **all data at the Allen Institute**.  In principle, a replacement (or additional) unique ID value could be added for importing into external databases.  The remaining columns correspond to the probabilities of each cell mapping to each cell type (from the dendrogram).  In this case we define hard probabilities (0 = unassigned to cell set; 1 = assigned to cell set) but this could be adapted to reflect real probabilities calculated elsewhere.  
+  
+  
+### Assign cells to remaining cell sets  
+  
+This section assigns cell sets that were defined as combinations of cell types, but that were NOT included in the above section.  As written, this function *assumes that the `cell_set_label` is assigned using the specific format described above*.  If Option 2 was selected in the previous code block, all cell_set_labels must have the same prefix.  
+  
+```{r} 
+mapping <- cell_assignment_from_groups_of_cell_types(updated_nomenclature,cell_id,mapping)
+```  
+  
+  
+Finally, we can add cell to cell set mappings specified by any other metadata.  No function is required for this mapping.  Instead, add new columns to `mapping` corresponding to the relevant cell set accessions and provide associated probabilities in the matrix entries.  In principle, one could also read in text files and add meta-data columns that way, if desired.  **For most taxonomies, this step can be skipped, as in most cases cell sets are defined exclusively as a combination of cell types.**  We print the remaining cell sets here, which in most cases should be none.  
+  
+```{r} 
+missed_ids <- setdiff(updated_nomenclature$cell_set_accession,colnames(mapping))
+print(paste0(missed_ids,collapse="; "))
+```
+  
+  
+### Output cell set assignments 
+  
+Finally, we output the cell to cell_set assignments as a csv file.  
+
+```{r}
+# Output cell to cell set assignments
+fwrite(mapping,"cell_to_cell_set_assignments.csv")
+```
+
+  
+### Create CCN standard file
+  
+The final output of the CCN script is a .zip file that contains these files (all described and outputted above):
+
+* dend.json: The annotated dendrogram file in json format (optional)  
+* nomenclature_table.csv: This file includes metadata columns from the CCN format for each node in dend.json, as well as additional cell sets corresponding to subclasses and classes without corresponding nodes.  
+* cell_to_cell_set_assignments.csv: A table indicating the probability of each cell mapping to each cell set.  In this case we define hard probabilities (0 = unassigned to cell set; 1 = assigned to cell set) but this could be adapted to reflect real probabilities calculated elsewhere (optional)  
+
+**The resulting .zip file should be shared in manuscripts and other sources as the standard CCN file, for linkage to other taxonomies.**  
+  
+```{r} 
+# Add all relevant files to a zip file with desired filename.  dend.json and/or cell_to_cell_set_assignments.csv can be manually removed below if needed
+
+files = c("dend.json","nomenclature_table.csv","cell_to_cell_set_assignments.csv")
+zip(paste0("nomenclature.zip"), files=files)
+```    
+  
+  
+Session info.  
+  
+```{r} 
+sessionInfo()
+``` 
+  
