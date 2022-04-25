@@ -163,26 +163,13 @@ ccn_output2<- apply_CCN(dend = ccn_output$final_dendrogram,
                         taxonomy_id = taxonomy_id,
                         taxonomy_author = taxonomy_author,
                         taxonomy_citation = taxonomy_citation,
-                        structure   = structure)  
-# Note the removed columns since the metadata was already added
+                        structure   = structure)  # Note the removed inputs since metadata was previously added
 
 ## Plot the dendrogram in its current state 
 plot_dend(ccn_output2$final_dendrogram,node_size = 3)
 ```
-
   
-### Create CCN standard file
-  
-
-
 **The resulting .zip file should be shared in manuscripts and other sources as the standard CCN file, for linkage to other taxonomies.**  
-  
-```{r} 
-# Add all relevant files to a zip file with desired filename.  dend.json and/or cell_to_cell_set_assignments.csv can be manually removed below if needed
-
-files = c("dend.json","nomenclature_table.csv","cell_to_cell_set_assignments.csv")
-zip(paste0("nomenclature.zip"), files=files)
-```    
   
   
 Session info.  
