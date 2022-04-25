@@ -54,10 +54,12 @@ apply_CCN <- function(dend = NULL,
 
   ##############################################################
   # Load libraries
-  library(dplyr)
-  library(dendextend)
-  library(data.table)
-  library(jsonlite)
+  suppressPackageStartupMessages({
+    library(dplyr)
+    library(dendextend)
+    library(data.table)
+    library(jsonlite)
+  })
 
 
   ##############################################################
@@ -308,8 +310,10 @@ build_nomenclature_table <- function(dend,
                                      ontology_tag = "UBERON:0001950"){
 
   # Load required libraries
-  library(dplyr)
-  library(dendextend)
+  suppressPackageStartupMessages({
+    library(dplyr)
+    library(dendextend)
+  })
 
   ################################################################
   ## Update the dendrogram labels
@@ -797,8 +801,11 @@ add_attr_to_dend <- function(dend, value, attribute="label") {
 #' @export
 plot_dend <- function (dend, dendro_data = NULL, node_size = 1, r = c(-0.1, 1))
 {
-    library(dendextend)
-    library(ggplot2)
+    suppressPackageStartupMessages({
+      library(dendextend)
+      library(ggplot2)
+    })
+
     if (is.null(dendro_data)) {
         dendro_data = as.ggdend(dend)
         dendro_data$nodes$label = get_nodes_attr(dend, "label")
@@ -903,7 +910,9 @@ dend_to_list <- function(dend, omit_names = c("markers","markers.byCl","class"))
 #' @export
 #'
 find_ontology_terms <- function(query, exact=TRUE, ontology = "UBERON", ...) {
-  library(rols)
+  suppressPackageStartupMessages({
+    library(rols)
+  })
   qry   <- OlsSearch(q = query, exact = exact, ontology=ontology, ...)
   qry   <- olsSearch(allRows(qry))
   out   <- data.frame(label=qry@response$label,term=qry@response$obo_id)
