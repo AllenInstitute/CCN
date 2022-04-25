@@ -53,7 +53,7 @@ suppressPackageStartupMessages({
 
 ### Define taxonomy variables  
 
-`taxonomy_id` is the name of the taxonomy in the format: <CCN><YYYYMMDD><T>, where:  
+`taxonomy_id` is the name of the taxonomy in the format: CCN<YYYYMMDD><T>, where:  
 
 * CCN stands for "Common Cell type Nomenclature"
 * YYYYMMDD represents an 8 digit date format (Y=year, M=month, D=day)

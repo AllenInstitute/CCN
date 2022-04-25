@@ -29,6 +29,7 @@
 #' @return a list containing the three CCN standard outputs:
 #' \describe{  # Describe is optional and can go after and param or return
 #'   \item{cell_set_information}{Final nomenclature table where rows correspond to cell sets and columns correspond to standard CCN columns.}
+#'   \item{initial_dendrogram}{A dendrogram updated with node numeric labels, if dend was provided.  These are useful for post-hoc manual annotations but otherwise can be ignored.}
 #'   \item{final_dendrogram}{A dendrogram updated with node labels and CCN annotations, if dend was provided.  This is what is output in dend.json}
 #'   \item{mapping}{A data frame where the first columns corresponds to each cell's unique ID (if cell_assignment or metadata is provided) and the remaining columns correspond to cell sets. Entries are either 0 = cell unassigned to cell set or 1 = cell assigned to cell set.}
 #' }
@@ -110,6 +111,7 @@ apply_CCN <- function(dend = NULL,
     nomenclature_information <- build_nomenclature_table(dend,  first_label, taxonomy_id, taxonomy_author,
                                                          taxonomy_citation, structure, ontology_tag)
     nomenclature = nomenclature_information$cell_set_information
+    initial_dendrogram = nomenclature_information$initial_dendrogram
   } else if ((!is.null(cell_assignment))|(!is.null(metadata))){
 
     # Define cell_assignment from metadata if not provided and if possible, otherwise throw and error
@@ -132,7 +134,7 @@ apply_CCN <- function(dend = NULL,
     cell_set_accession <- gsub("CCN","CS",paste0(taxonomy_id,"_",1:(length(types)+1)))
     cs_digits   <- nchar(length(types))+1
     first_label <- setNames(first_label[1],"1")
-    warning("Only first `first_label` entry is used when dend and nomenclatre are set to NULL.")
+    warning("Only first `first_label` entry is used when dend and nomenclature are set to NULL.")
     num <- substr(10^cs_digits+(1:length(types)),2,100)
     cell_set_label <- paste(first_label[1],num)
 
@@ -173,7 +175,10 @@ apply_CCN <- function(dend = NULL,
   ## Update and save the dendrogram, if a dendrogram was provided
   if(!is.null(dend)){
     # Update the dendogram
-    updated_dendrogram <- update_dendrogram_with_nomenclature(nomenclature_information$initial_dendrogram,nomenclature)
+    if(!exists("initial_dendrogram")) {
+      initial_dendrogram = overwrite_dend_node_labels(dend)$dend
+    }
+    updated_dendrogram <- update_dendrogram_with_nomenclature(initial_dendrogram,nomenclature)
 
     # Convert to list
     dend_list <- dend_to_list(updated_dendrogram, omit_names = c("markers","markers.byCl","class"))
@@ -233,7 +238,7 @@ apply_CCN <- function(dend = NULL,
     mapping <- cell_assignment_from_groups_of_cell_types(nomenclature,cell_id,mapping,FALSE)
 
     # Output any missed cell set accession IDs
-    missed_ids <- setdiff(updated_nomenclature$cell_set_accession,colnames(mapping))
+    missed_ids <- setdiff(nomenclature$cell_set_accession,colnames(mapping))
     if (length(missed_ids)>0){
       warning(paste("The following cell sets were not used for cell mapping:",paste0(missed_ids,collapse="; ")))
     }
@@ -259,8 +264,12 @@ apply_CCN <- function(dend = NULL,
   # Return results
   if(!exists("nomenclature"))       nomenclature = NULL
   if(!exists("updated_dendrogram")) updated_dendrogram = NULL
+  if(!exists("initial_dendrogram")) initial_dendrogram = NULL
   if(!exists("mapping"))            mapping = NULL
-  list(cell_set_information=nomenclature, final_dendrogram=updated_dendrogram, mapping=mapping)
+  list(cell_set_information = nomenclature,
+       initial_dendrogram = initial_dendrogram,
+       final_dendrogram = updated_dendrogram,
+       mapping = mapping)
 
 }
 
@@ -696,11 +705,11 @@ annotate_nomenclature_from_metadata <- function(cell_set_information, metadata, 
 #' @export
 merge_cell_set_labels <- function(cell_set_label_vector, sep=" "){
   if(length(cell_set_label_vector)==1) return(cell_set_label_vector)
+  labs <- as.character(cell_set_label_vector)
   if(length(strsplit(labs[1],sep)[[1]])==1){
     cell_set_label_vector <- paste("All",cell_set_label_vector,sep=sep)
     warning("No first_label provided with cell_set_labels, therefore `All` is set as first_label. This may cause problems later.")
   }
-  labs <- as.character(cell_set_label_vector)
   name <- as.character(unclass(sapply(labs, function(x) strsplit(x,sep)[[1]][1])))
   nums <- as.character(unclass(sapply(labs, function(x) strsplit(x,sep)[[1]][2])))
   ints <- suppressWarnings(setNames(as.numeric(nums),nums))
