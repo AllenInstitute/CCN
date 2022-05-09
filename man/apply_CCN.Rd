@@ -60,6 +60,7 @@ apply_CCN(
 a list containing the three CCN standard outputs:
 \describe{  # Describe is optional and can go after and param or return
   \item{cell_set_information}{Final nomenclature table where rows correspond to cell sets and columns correspond to standard CCN columns.}
+  \item{initial_dendrogram}{A dendrogram updated with node numeric labels, if dend was provided.  These are useful for post-hoc manual annotations but otherwise can be ignored.}
   \item{final_dendrogram}{A dendrogram updated with node labels and CCN annotations, if dend was provided.  This is what is output in dend.json}
   \item{mapping}{A data frame where the first columns corresponds to each cell's unique ID (if cell_assignment or metadata is provided) and the remaining columns correspond to cell sets. Entries are either 0 = cell unassigned to cell set or 1 = cell assigned to cell set.}
 }
