@@ -156,7 +156,7 @@ apply_CCN <- function(dend = NULL,
 
     # Move cell_set_label="All cells" to cell_set_preferred_alias
     nomenclature$cell_set_preferred_alias[nomenclature$cell_set_label=="All cells"] = "All cells"
-    labNew <- merge_cell_set_labels(nomenclature$cell_set_label)
+    labNew <- merge_cell_set_labels(nomenclature$cell_set_label[nomenclature$cell_set_label!="All cells"])
     nomenclature$cell_set_label[nomenclature$cell_set_preferred_alias=="All cells"] = labNew
   }
 
