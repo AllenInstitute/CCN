@@ -12,7 +12,7 @@ cell_assignment_from_groups_of_cell_types(
 )
 }
 \arguments{
-\item{updated_nomenclature}{dendrogram of annotated cell types}
+\item{updated_nomenclature}{nomenclature table of annotated cell types}
 
 \item{cell_id}{a character vector of cell_set_accession_ids that corresponds to each sample}
 

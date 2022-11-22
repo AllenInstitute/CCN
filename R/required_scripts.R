@@ -79,7 +79,7 @@ apply_CCN <- function(dend = NULL,
 
     # If nomenclature table is provided, do not generate it
     if (!is.null(dend)){
-      warning("Since both `nomenclature` and `dend` are provided final dendrogram will be annotated exclusively from provided nomenclature and it's updates, and not from any extra information in `dend`.  We recommend providing both ONLY when the inputted nomenclature table was originally generated from the inputted dendrogram.")
+      warning("Since both `nomenclature` and `dend` are provided final dendrogram will be annotated exclusively from provided nomenclature and it's updates, and not from any extra information in `dend`.  We recommend providing both ONLY when the inputted nomenclature table was originally generated from the inputted dendrogram.\n")
     }
     # Confirm "All cells" exists and if not, then generate it
     nomenclature <- as.data.frame(nomenclature)
@@ -122,7 +122,7 @@ apply_CCN <- function(dend = NULL,
         stop("Error: Valid cluster_column in metadata must be provided if dend, nomenclature, and cell_assignment are unspecified.")
       } else{
         cell_assignment <- setNames(metadata[,cluster_column],rownames(metadata))
-        warning("cell_assignment is derived from metadata and therefore outputted `mapping` matrix may be innaccurate.")
+        warning("cell_assignment is derived from metadata and therefore outputted `mapping` matrix may be innaccurate.\n")
       }
     }
 
@@ -136,7 +136,7 @@ apply_CCN <- function(dend = NULL,
     cell_set_accession <- gsub("CCN","CS",paste0(taxonomy_id,"_",1:(length(types)+1)))
     cs_digits   <- nchar(length(types))+1
     first_label <- setNames(first_label[1],"1")
-    warning("Only first `first_label` entry is used when dend and nomenclature are set to NULL.")
+    warning("Only first `first_label` entry is used when dend and nomenclature are set to NULL.\n")
     num <- substr(10^cs_digits+(1:length(types)),2,100)
     cell_set_label <- paste(first_label[1],num)
 
@@ -203,21 +203,22 @@ apply_CCN <- function(dend = NULL,
       name_col <- grepl("name",colnames(metadata))+grepl("sample",colnames(metadata))+grepl("cell",colnames(metadata))
       if(sum(name_col)==0){
         names(cell_assignment) <- 1:length(cell_assignment)
-        warning("cell_assignment was not provided with names. Names are set as an ordered vector 1:length(cell_assignment).")
+        warning("cell_assignment was not provided with names. Names are set as an ordered vector 1:length(cell_assignment).\n")
       } else {
         names(cell_assignment) <- metadata[,which.max(name_col)[1]]
         cn <- colnames(metadata)[which.max(name_col)[1]]
-        warning(paste0("cell_assignment was not provided with names. Names are set as metadata$",cn,"."))
+        warning(paste0("cell_assignment was not provided with names. Names are set as metadata$",cn,".\n"))
       }
     }
   }
   cell_id <- cell_assignment
+  samples <- names(cell_assignment)  # I think this is correct...
 
   if(!is.null(cell_assignment)){
     # Add cell names if needed
     if(is.null(names(cell_assignment))){
       names(cell_assignment) <- 1:length(cell_assignment)
-      warning("cell_assignment was not provided with names. Names are set as an ordered vector 1:length(cell_assignment).")
+      warning("cell_assignment was not provided with names. Names are set as an ordered vector 1:length(cell_assignment).\n")
     }
 
     # Define the cell_id (e.g., cell set accession id) from the cell_assignment
@@ -232,7 +233,7 @@ apply_CCN <- function(dend = NULL,
       mapping <- data.frame(sample_name=samples, call=((cell_id==cell_id[1])+1-1))
       colnames(mapping) <- c("sample_name",cell_id[1])
       if(length(first_label)>1){
-        warning("Currently nomenclature tables without dendrograms, but with more than one cell_set_label prefix sometimes cause issues in generating the cell by cell set assignment matrix.")
+        warning("Currently nomenclature tables without dendrograms, but with more than one cell_set_label prefix sometimes cause issues in generating the cell by cell set assignment matrix.\n")
       }
     }
 
@@ -559,7 +560,7 @@ define_child_accessions <- function(nomenclature){
 #'   elsewhere. Only cell sets not already included in input mapping table are added.
 #'   NOTE: This function has some issues if more than one "first_label" is in use.
 #'
-#' @param updated_nomenclature dendrogram of annotated cell types
+#' @param updated_nomenclature nomenclature table of annotated cell types
 #' @param cell_id a character vector of cell_set_accession_ids that corresponds to each sample
 #' @param mapping A data frame where the first columns corresponds to the cell sample_name and the remaining columns correspond to cell sets (e.g., the output from `cell_assignment_from_dendrogram`)
 #' @param verbose A logical indicating whether to output cell set accession IDs of new annotations to screen (default=TRUE)
@@ -582,7 +583,8 @@ cell_assignment_from_groups_of_cell_types <- function(updated_nomenclature,cell_
   ## Find the corresponding cell types for those cell sets
   labsL     <- list()
   nClusters <- sum(!(grepl(",",updated_nomenclature$cell_set_label)|grepl("-",updated_nomenclature$cell_set_label)))
-  cs_digits <- max(1,nchar(nClusters))
+  #cs_digits <- max(1,nchar(nClusters))
+  cs_digits <- nchar(strsplit(updated_nomenclature$cell_set_label[1]," ")[[1]][-1]) # infer from input cell_set_labels
   if (length(missed_labels)>0){
     for (i in 1:length(missed_labels)){
       m <- eval(parse(text=paste("c(",gsub("-",":",gsub(missed_class[i],"",missed_labels[i])),")")))
@@ -712,13 +714,13 @@ merge_cell_set_labels <- function(cell_set_label_vector, sep=" "){
   labs <- as.character(cell_set_label_vector)
   if(length(strsplit(labs[1],sep)[[1]])==1){
     cell_set_label_vector <- paste("All",cell_set_label_vector,sep=sep)
-    warning("No first_label provided with cell_set_labels, therefore `All` is set as first_label. This may cause problems later.")
+    warning("No first_label provided with cell_set_labels, therefore `All` is set as first_label. This may cause problems later.\n")
   }
   name <- as.character(unclass(sapply(labs, function(x) strsplit(x,sep)[[1]][1])))
   nums <- as.character(unclass(sapply(labs, function(x) strsplit(x,sep)[[1]][2])))
   ints <- suppressWarnings(setNames(as.numeric(nums),nums))
   if(sum(is.na(ints))>0)
-    stop("cell_set_label_vector is of a format incompatible by this function. They all must be [first_label][sep][INTEGER_VECTOR].")
+    stop("cell_set_label_vector is of a format incompatible by this function. They all must be [first_label][sep][INTEGER_VECTOR].\n")
 
   val <- NULL
   for (clas in unique(name)){
