@@ -20,7 +20,8 @@ apply_CCN(
   annotation_columns = rep("cell_set_preferred_alias", length(metadata_columns)),
   cluster_column = "cluster_label",
   append_metadata = FALSE,
-  ccn_filename = "nomenclature.zip"
+  ccn_filename = "nomenclature.zip",
+  duplicate_annotations = "cell_set_additional_aliases"
 )
 }
 \arguments{
@@ -55,6 +56,8 @@ apply_CCN(
 \item{append_metadata}{If TRUE, it will append info; if FALSE (default), it will skip cases where there is already an entry. Only used if "metadata" is provided}
 
 \item{ccn_filename}{file name for zip file with final CCN files containing the same information that is returned.  Will output to current working directory unless full path is specified.  Will not output anywhere if set to NULL.}
+
+\item{duplicate_annotations}{either NULL or a character indicating which column to append annotations if the annotation_columns column already has an entry.  Only used if append=TRUE. Default "cell_set_additional_aliases"}
 }
 \value{
 a list containing the three CCN standard outputs:

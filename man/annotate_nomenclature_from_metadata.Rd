@@ -11,7 +11,8 @@ annotate_nomenclature_from_metadata(
   metadata_order = NULL,
   annotation_columns = rep("cell_set_preferred_alias", length(metadata_columns)),
   cluster_column = "cluster_label",
-  append = TRUE
+  append = TRUE,
+  duplicate_annotations = NULL
 )
 }
 \arguments{
@@ -28,6 +29,8 @@ annotate_nomenclature_from_metadata(
 \item{cluster_column}{column name in "metadata" that corresponds to values in the "cell_set_preferred_alias" column of "cell_set_information"}
 
 \item{append}{If TRUE (default), it will append info; if FALSE, it will skip cases where there is already an entry}
+
+\item{duplicate_annotations}{either NULL (default) or a character indicating which column to append annotations if the annotation_columns column already has an entry.  Only used if append=TRUE.}
 }
 \value{
 An updated nomenclature table with new cell sets and updated annotations based on requested metadata

@@ -25,6 +25,8 @@
 #' @param cluster_column column name in "metadata" that corresponds to values in the "cell_set_preferred_alias" column of "cell_set_information". Only used if "metadata" is provided
 #' @param append_metadata If TRUE, it will append info; if FALSE (default), it will skip cases where there is already an entry. Only used if "metadata" is provided
 #' @param ccn_filename file name for zip file with final CCN files containing the same information that is returned.  Will output to current working directory unless full path is specified.  Will not output anywhere if set to NULL.
+#' @param duplicate_annotations either NULL or a character indicating which column to append annotations if the annotation_columns column already has an entry.  Only used if append=TRUE. Default "cell_set_additional_aliases"
+
 #'
 #' @return a list containing the three CCN standard outputs:
 #' \describe{  # Describe is optional and can go after and param or return
@@ -50,7 +52,8 @@ apply_CCN <- function(dend = NULL,
                       annotation_columns = rep("cell_set_preferred_alias",length(metadata_columns)),
                       cluster_column = "cluster_label",
                       append_metadata = FALSE,
-                      ccn_filename = "nomenclature.zip"){
+                      ccn_filename = "nomenclature.zip",
+                      duplicate_annotations = "cell_set_additional_aliases"){
 
   ##############################################################
   # Load libraries
@@ -135,8 +138,9 @@ apply_CCN <- function(dend = NULL,
     # Set the nomenclature table
     cell_set_accession <- gsub("CCN","CS",paste0(taxonomy_id,"_",1:(length(types)+1)))
     cs_digits   <- nchar(length(types))+1
+    if(length(first_label)>1)
+      warning("Only first `first_label` entry is used when dend and nomenclature are set to NULL.\n")
     first_label <- setNames(first_label[1],"1")
-    warning("Only first `first_label` entry is used when dend and nomenclature are set to NULL.\n")
     num <- substr(10^cs_digits+(1:length(types)),2,100)
     cell_set_label <- paste(first_label[1],num)
 
@@ -164,7 +168,8 @@ apply_CCN <- function(dend = NULL,
   ##############################################################
   ## If metadata and associated columns are provided, add additional cell_sets based on metadata
   nomenclature <- annotate_nomenclature_from_metadata(
-    nomenclature, metadata, metadata_columns, metadata_order, annotation_columns, cluster_column, append_metadata)
+    nomenclature, metadata, metadata_columns, metadata_order, annotation_columns,
+    cluster_column, append_metadata, duplicate_annotations)
   # NOTE: any error checks should be completed within the above function
 
 
@@ -629,6 +634,7 @@ cell_assignment_from_groups_of_cell_types <- function(updated_nomenclature,cell_
 #' @param annotation_columns character vector indicating which column to annotate for each metadata column supplied (default is is "cell_set_preferred_alias")
 #' @param cluster_column column name in "metadata" that corresponds to values in the "cell_set_preferred_alias" column of "cell_set_information"
 #' @param append If TRUE (default), it will append info; if FALSE, it will skip cases where there is already an entry
+#' @param duplicate_annotations either NULL (default) or a character indicating which column to append annotations if the annotation_columns column already has an entry.  Only used if append=TRUE.
 #'
 #' @return An updated nomenclature table with new cell sets and updated annotations based on requested metadata
 #'
@@ -637,7 +643,8 @@ annotate_nomenclature_from_metadata <- function(cell_set_information, metadata, 
                                                 metadata_order = NULL,
                                                 annotation_columns = rep("cell_set_preferred_alias",length(metadata_columns)),
                                                 cluster_column = "cluster_label",
-                                                append = TRUE)
+                                                append = TRUE,
+                                                duplicate_annotations = NULL)
 {
   # Set up some variables and do some input checks
   cell_set_information <- as.data.frame(cell_set_information)
@@ -656,6 +663,11 @@ annotate_nomenclature_from_metadata <- function(cell_set_information, metadata, 
     print("At least one annotation_column is invalid.  Please correct and try again.")
     return(cell_set_information)
   }
+  if(!is.null(duplicate_annotations))
+    if(length(setdiff(duplicate_annotations,colnames(cell_set_information)))>0){
+      print("duplicate_annotations is not NULL or a valid column.  Please correct and try again.")
+      return(cell_set_information)
+    }
 
   # Run the script for each value column
   for (column in metadata_columns){
@@ -685,10 +697,20 @@ annotate_nomenclature_from_metadata <- function(cell_set_information, metadata, 
 
       # Add information to cell set
       ann2 <- cell_set_information[which(cell_set_information$cell_set_label==lab)[1],annotation_columns[column]]
+      column2 = annotation_columns[column]
       if (!((nchar(ann2)>0)&(!append))){
        ann2 <- paste(ann2,ann,sep="|")
-       if(substr(ann2,1,1)=="|") ann2 <- substr(ann2,2,nchar(ann2))
-       cell_set_information[which(cell_set_information$cell_set_label==lab)[1],annotation_columns[column]] <- ann2
+       if(substr(ann2,1,1)=="|") {
+         ann2 <- substr(ann2,2,nchar(ann2))
+       } else {
+         # This section instead updates the duplicate_annotations column if annotation_columns[column] already has an entry
+         if(!is.null(duplicate_annotations))
+           column2 = duplicate_annotations
+           ann2 <- cell_set_information[which(cell_set_information$cell_set_label==lab)[1],column2]
+           ann2 <- paste(ann2,ann,sep="|")
+           if(substr(ann2,1,1)=="|") ann2 <- substr(ann2,2,nchar(ann2))
+       }
+       cell_set_information[which(cell_set_information$cell_set_label==lab)[1],column2] <- ann2
       }
     }
   }
