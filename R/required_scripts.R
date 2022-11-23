@@ -727,6 +727,7 @@ annotate_nomenclature_from_metadata <- function(cell_set_information, metadata, 
 #'   the cell set labels together in a specific format.
 #'
 #' @param cell_set_label_vector character vector of cell set labels for the form "{prefix} {value}"
+#' @param sep delimiter separating prefix from value (default of " " should likely not be changed)
 #'
 #' @return character corresponding to merged value
 #'
@@ -758,6 +759,49 @@ merge_cell_set_labels <- function(cell_set_label_vector, sep=" "){
   val <- paste(val,collapse = "/")
   val
 }
+
+#' Expand cell set labels
+#'
+#' Takes as input a vector of merged cell set labels and outputs a list of all of the cell set
+#'   labels as vectors.  If remerge=TRUE, then instead a vector of remerged cell set labels is
+#'   output.  Note: this function assumes a single first_label value for all cell sets.
+#'
+#' @param cell_set_label_vector character vector of cell set labels for the form "{prefix} {value}"
+#' @param sep delimiter separating prefix from value (default of " " should likely not be changed)
+#' @param remerge should an optimally re-merged vector of cell set labels (TRUE; default) or a list of all separate cell set labels (FALSE) be returned
+#'
+#' @return character list or vector corresponding to desired output
+#'
+#' @export
+expand_cell_set_labels <- function(cell_set_label_vector, sep=" ", remerge=TRUE){
+  first_label <- strsplit(cell_set_label_vector[1],sep)[[1]][1]
+  labs <- as.character(cell_set_label_vector)
+  labs <- gsub(first_label,"",labs)
+  labs <- gsub(" ","",labs)
+  cs_digits <- nchar(strsplit(gsub("-",",",labs[1]),",")[[1]][1])
+
+  expand_one <- function(x, cs_digits=5){
+    xl <- strsplit(x,",")[[1]]
+    xout <- NULL
+    for (i in 1:length(xl)) {
+      if(!grepl("-",xl[i])){
+        xout <- c(xout,as.numeric(xl[i]))
+      } else {
+        xseq <- as.numeric(as.character(strsplit(xl[[i]],"-")[[1]]))
+        xout <- c(xout,xseq[1]:xseq[2])
+      }
+    }
+    xout <- substr(as.character(sort(xout)+10^cs_digits),2,cs_digits+1)
+    paste(first_label,xout,sep=sep)
+  }
+
+  cell_set_label_list <- lapply(labs,expand_one,cs_digits)
+  if(!remerge) return(cell_set_label_list)
+  as.character(lapply(cell_set_label_list,merge_cell_set_labels, sep=sep))
+}
+
+
+
 
 
 get_dendrogram_value <- function(dend,value, sep=" "){

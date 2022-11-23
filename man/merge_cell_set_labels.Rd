@@ -8,6 +8,8 @@ merge_cell_set_labels(cell_set_label_vector, sep = " ")
 }
 \arguments{
 \item{cell_set_label_vector}{character vector of cell set labels for the form "{prefix} {value}"}
+
+\item{sep}{delimiter separating prefix from value (default of " " should likely not be changed)}
 }
 \value{
 character corresponding to merged value
