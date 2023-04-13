@@ -15,5 +15,5 @@ Imports:
     data.table (>= 1.0),
     jsonlite (>= 1.1),
     rols (>= 2.0)
-RoxygenNote: 7.1.2
+RoxygenNote: 7.2.3
 VignetteBuilder: knitr

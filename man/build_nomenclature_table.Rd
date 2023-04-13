@@ -19,7 +19,7 @@ build_nomenclature_table(
 
 \item{first_label}{a named vector used as prefix for cell_set_label}
 
-\item{taxonomy_id}{unique accession ID for the taxonomy also used to prefix the cell sets accessions.  Defaults to `CCN[YYYYMMDD]0`}
+\item{taxonomy_id}{unique accession ID for the taxonomy also used to prefix the cell sets accessions.  Defaults to `CCN[YYYYMMDD]0`. If more than one is provided (not recommended), any IDs beyond the first in the character vector are saved in a "taxonomy_alias" column.}
 
 \item{taxonomy_author}{the name of a point person for this taxonomy}
 

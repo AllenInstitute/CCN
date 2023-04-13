@@ -14,7 +14,7 @@
 #' @param cell_assignment a named vector linking each unique cell id ('names(cell_assignment)') to their cell type assignments ('cell_assignment')
 #' @param metadata cell or cell type metadata table that includes the columns to annotate
 #' @param first_label a named vector used as prefix for cell_set_label
-#' @param taxonomy_id unique accession ID for the taxonomy also used to prefix the cell sets accessions.  Defaults to `CCN[YYYYMMDD]0`
+#' @param taxonomy_id unique accession ID for the taxonomy also used to prefix the cell sets accessions.  Defaults to `CCN[YYYYMMDD]0`.  If more than one is provided (not recommended), any IDs beyond the first in the character vector are saved in a "taxonomy_alias" column.
 #' @param taxonomy_author the name of a point person for this taxonomy
 #' @param taxonomy_citation permanent data identifier corresponding to the taxonomy (or default="" if none). Ideally the DOI for a relevant publication.
 #' @param structure the location in the brain (or body) from where the data in the taxonomy was collected
@@ -73,6 +73,11 @@ apply_CCN <- function(dend = NULL,
   }
   if((is.null(dend))&(is.null(nomenclature))&(is.null(cell_assignment))&(is.null(metadata))){
     stop("Error: at least one of dend, nomenclature, cell_assignment, or metadata must be provided.")
+  }
+  taxonomy_alias = NULL
+  if (length(taxonomy_id)>1){
+    taxonomy_alias <- paste(taxonomy_id[2:length(taxonomy_id)],collapse="|")
+    taxonomy_id    <- taxonomy_id[1]
   }
 
 
@@ -174,8 +179,15 @@ apply_CCN <- function(dend = NULL,
 
 
   ##############################################################
-  ## Define cell set children
+  ## Define cell cell children and parents
   nomenclature <- define_child_accessions(nomenclature)
+  nomenclature <- define_parent_accessions(nomenclature)
+
+
+  ##############################################################
+  ## Add taxonomy aliases, if any
+  if(!is.null(taxonomy_alias))
+    nomenclature$taxonomy_alias = taxonomy_alias
 
 
   ##############################################################
@@ -293,7 +305,7 @@ apply_CCN <- function(dend = NULL,
 #'
 #' @param dend dendrogram of cell types to annotate
 #' @param first_label a named vector used as prefix for cell_set_label
-#' @param taxonomy_id unique accession ID for the taxonomy also used to prefix the cell sets accessions.  Defaults to `CCN[YYYYMMDD]0`
+#' @param taxonomy_id unique accession ID for the taxonomy also used to prefix the cell sets accessions.  Defaults to `CCN[YYYYMMDD]0`. If more than one is provided (not recommended), any IDs beyond the first in the character vector are saved in a "taxonomy_alias" column.
 #' @param taxonomy_author the name of a point person for this taxonomy
 #' @param taxonomy_citation permanent data identifier corresponding to the taxonomy (or default="" if none). Ideally the DOI for a relevant publication.
 #' @param structure the location in the brain (or body) from where the data in the taxonomy was collected
@@ -362,6 +374,13 @@ build_nomenclature_table <- function(dend,
   # How many digits to use for cell set number (as few as possible)
   cs_digits = max(1,nchar(dim(anno)[1]))
 
+  # Check for taxonomy aliases, if any
+  taxonomy_alias = NULL
+  if (length(taxonomy_id)>1){
+    taxonomy_alias <- paste(taxonomy_id[2:length(taxonomy_id)],collapse="|")
+    taxonomy_id    <- taxonomy_id[1]
+  }
+
   # Define cell_set_accession
   anno$cell_set_accession <- paste0(taxonomy_id,"_",anno$cluster_id) #substr(10^cs_digits+anno$cluster_id,2,100))
   anno$cell_set_accession <- gsub("CCN","CS",anno$cell_set_accession)
@@ -422,6 +441,13 @@ build_nomenclature_table <- function(dend,
   anno$cell_set_preferred_alias[anno$cell_set_label=="All cells"] = "All cells"
   labNew <- merge_cell_set_labels(anno$cell_set_label[is.element(anno$cell_set_preferred_alias,labels(dend))])
   anno$cell_set_label[anno$cell_set_preferred_alias=="All cells"] = labNew
+
+
+  ##############################################################
+  ## Add taxonomy aliases, if any
+  if(!is.null(taxonomy_alias))
+    anno$taxonomy_alias = taxonomy_alias
+
 
   ################################################################
   ## Update the dendrogram with this new information
@@ -554,6 +580,142 @@ define_child_accessions <- function(nomenclature){
   }
   nomenclature
 }
+
+
+#' Label parent accessions
+#'
+#' Create an additional tag called parent_cell_set_accession, which is defined as the node with the fewest
+#' children that contains a cell set.
+#'
+#' Notes:
+#'
+#' If the cell sets follows a strict hierarchy (e.g., a tree) then the parent will always be the node in the
+#' hierarchy directly above it; however, this function still can return parents in more complex, multi-inheritance
+#' structured tables.
+#'
+#' This can be helpful for integration into downstream ontology use cases or can be ignored.
+#'
+#' child_cell_set_accessions is a prerequisite for this function, and these will be calculate herein if they
+#' haven't yet been calculated.
+#'
+#' @param nomenclature the nomenclature table output from `build_nomenclature_table` or related/downstream functions.
+#'
+#' @return An updated nomenclature table with a "parent_set_accession" column appended (and also a "child_cell_set_accessions" if it wasn't already calculated)
+#'
+#' @export
+define_parent_accessions <- function(nomenclature){
+  # Define child accessions if they haven't been defined yet
+  if(is.null(nomenclature$child_cell_set_accessions)){
+    warning("Child accessions need to be defined before parents. These are being run now.")
+    nomenclature <- define_child_accessions(nomenclature)
+  }
+  preferredAlias <- make_preferred_alias_unique(nomenclature)
+  lus <- function(x) length(unique(setdiff(x,"")))
+  children    <- split_column(nomenclature,"child_cell_set_accessions")
+  numChildren <- apply(children,1,lus)
+  familyPairs <- NULL
+  for (i in 1:length(preferredAlias)) if(numChildren[i]!=max(numChildren)){
+    y <- unique(children[i,])
+    if(length(y)==1) y = nomenclature$cell_set_accession[i]
+    isDescendent <- apply(children,1,function(x,y) lus(y)==lus(intersect(x,y)),y)
+    isDescendent[i] = FALSE
+    kp <- which(isDescendent&(numChildren==min(numChildren[isDescendent])))
+    familyPairs <- rbind(familyPairs,c(preferredAlias[kp[1]],preferredAlias[i]))
+  }
+  colnames(familyPairs) = c("ParentAlias","ChildAlias")
+
+  # Convert back to cell set accessions and save
+  familyAccessions <- cbind(nomenclature$cell_set_accession[match(familyPairs[,1],preferredAlias)],
+                            nomenclature$cell_set_accession[match(familyPairs[,2],preferredAlias)])
+  parentAccession  <- familyAccessions[,1][match(nomenclature$cell_set_accession,familyAccessions[,2])]
+  parentAccession[is.na(parentAccession)] = ""
+  nomenclature$parent_cell_set_accession <- parentAccession
+  nomenclature
+}
+
+
+#' Make a unique preferred alias
+#'
+#' This is an internal function that converts the preferred_alias vector to a unique vector
+#'  combining preferred alias and cell set label
+#'
+#' @param nomenclature the nomenclature table output from `build_nomenclature_table` or related/downstream functions.
+#'
+#' @return A unique preferred alias
+make_preferred_alias_unique <- function(nomenclature){
+  preferred_alias_in <- nomenclature$cell_set_preferred_alias
+  lus <- function(x) length(unique(setdiff(x,"")))
+  children    <- split_column(nomenclature,"child_cell_set_accessions")
+  numChildren <- apply(children,1,lus)
+  preferred_alias_in[numChildren==max(numChildren)] = "All cells"
+  label <- gsub(paste0(gsub("CCN","CS",nomenclature$taxonomy_id[1]),"_"),"",
+                nomenclature$cell_set_accession)
+
+  preferredAlias <- NULL
+  for (i in 1:length(preferred_alias_in)) {
+    y <- unique(children[i,])
+    isDescendent <- apply(children,1,function(x,y) lus(y)==lus(intersect(x,y)),y)
+    isDescendent[i] = TRUE
+    isDescendent[preferred_alias_in==""] = FALSE
+    isDescendent[numChildren==max(numChildren)] = TRUE
+    kp <- which(isDescendent&(numChildren==min(numChildren[isDescendent])))
+    if(length(y)==1) kp = i  # To account for no children case
+    sa <- ifelse(i==kp[1],""," subset")
+    pa <- paste0(preferred_alias_in[kp[1]],sa," (",label[i],")")
+    preferredAlias <- c(preferredAlias,pa)
+  }
+  preferredAlias
+}
+
+
+#' Split a column
+#'
+#' This function splits a column in the nomenclature table by a defined character into a matrix of values for use with downstream CCN functions
+#'
+#' @param nomenclature the nomenclature table output from `build_nomenclature_table` or related/downstream functions.
+#' @param column_name the name of the column for splitting
+#' @param split_char the character to split the column on (default = "|")
+#' @param expand expands the matrix (default = FALSE)
+#'
+#' @return A matrix with character entries, where each row corresponds to an entry from the input vector and each column corresponds to unique values from the split vectors
+#'
+#' @export
+split_column <- function(nomenclature, column_name, split_char = "\\|", expand=FALSE){
+
+  # --- Return the original column if it was blank
+  nomenclature[is.na(nomenclature[,column_name]),column_name] = ""
+  if(max(nchar(nomenclature[,column_name]))==0)
+    return (cbind(nomenclature[,column_name],nomenclature[,column_name]))
+
+  # --- Split out the values in the correct column
+  if(max(nchar(nomenclature[,column_name]))==0) return (out)
+  splitColumn = strsplit(nomenclature[,column_name],split_char)
+  len <- -1
+  for (i in 1:length(splitColumn)) len=max(len,length(splitColumn[[i]]))
+  # --- Convert it to a matrix and fill in missing values
+  out <- matrix("",nrow=length(splitColumn),ncol=len)
+  for (i in 1:length(splitColumn)){
+    tmp = splitColumn[[i]]
+    if(length(tmp)>1) for (j in 2:length(tmp)) if(tmp[j]=="")
+      tmp[j] = tmp[j-1]
+    if(length(tmp)>0){
+      out[i,1:length(tmp)] = tmp
+      if(expand&(length(tmp)<len)){
+        out[i,(length(tmp)+1):len] = tmp[length(tmp)]
+      }
+    }
+  }
+
+  # --- Convert to two column matrix if a vector for downstream use
+  out <- t(t(out))
+  if(dim(out)[2]==1)
+    out <- cbind(out,out)
+
+  # --- Return results
+  out
+}
+
+
 
 
 #' Assign cells to cell sets from nomenclature table
@@ -988,4 +1150,8 @@ find_ontology_terms <- function(query, exact=TRUE, ontology = "UBERON", ...) {
     out <- data.frame(label=query,term="")
   return(out)
 }
+
+
+
+
 
