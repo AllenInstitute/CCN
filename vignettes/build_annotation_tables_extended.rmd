@@ -260,10 +260,19 @@ updated_nomenclature[updated_nomenclature$cell_set_accession=="CS202204130_248",
   
 ### Label cell set children
   
-Create an additional tag called `child_cell_set_accessions`, which is a "|"-separated character vector indicating all of the child set sets in the dendrogram (e.g., "provisional cell types", "leaves", or "terminal nodes").  This is calculated by using the `cell_set_label` tags and will help with integration into downstream ontology use cases.  
+Create an additional tag called `child_cell_set_accessions`, which is a "|"-separated character vector indicating all of the child cell sets in the dendrogram (e.g., "provisional cell types", "leaves", or "terminal nodes").  This is calculated by using the `cell_set_label` tags and will help with integration into downstream ontology use cases.  
   
 ```{r}
 updated_nomenclature <- define_child_accessions(updated_nomenclature)
+```
+  
+  
+### Label cell set parents
+  
+Create an additional tag called `parent_cell_set_accession`, which is defined as the node with the fewest children that contains a cell set. If the cell sets follows a strict hierarchy (e.g., a tree) then the parent will always be the node in the hierarchy directly above it; however, this function still can return parents in more complex, multi-inheritance structured tables. This can be helpful for integration into downstream ontology use cases.  
+  
+```{r}
+updated_nomenclature <- define_parent_accessions(updated_nomenclature)
 ```
   
   
